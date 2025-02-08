@@ -14,7 +14,9 @@ type IConnection interface {
 	// RemoteAddr 获取远程客户端的TCP状态 IP:Port
 	RemoteAddr() net.Addr
 	// Send 发送数据，将数据发给远程客户端
-	Send(data []byte) error
+	SendMsg(msgId uint32, data []byte) error
+
+	ReadMsg() (IMessage, error)
 }
 
 type HandleFunc func(*net.TCPConn, []byte, int) error

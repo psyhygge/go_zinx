@@ -1,17 +1,19 @@
 package znet
 
 import (
+	"errors"
 	"fmt"
 	"go_zinx/ziface"
+	"io"
 	"net"
 )
 
 type Connection struct {
-	Conn      *net.TCPConn      // tcp socket
-	ConnID    uint32            // 连接id
-	IsClosed  bool              // 连接是否关闭
-	handleApi ziface.HandleFunc // 该连接所绑定的处理api方法
-	ExitChan  chan bool         // 告知当前连接停止的 channel
+	Conn     *net.TCPConn   // tcp socket
+	ConnID   uint32         // 连接id
+	IsClosed bool           // 连接是否关闭
+	ExitChan chan bool      // 告知当前连接停止的 channel
+	Router   ziface.IRouter // 该连接处理的router
 }
 
 func (c *Connection) StartReader() {
@@ -20,18 +22,25 @@ func (c *Connection) StartReader() {
 	defer c.Stop()
 
 	for {
-		buf := make([]byte, 512)
-		cnt, err := c.Conn.Read(buf)
+		msg, err := c.ReadMsg()
 		if err != nil {
-			fmt.Println("read from client failed, ", err)
-			continue
-		}
-
-		// 调用当前连接所绑定的handleAPI执行
-		if err := c.handleApi(c.Conn, buf, cnt); err != nil {
-			fmt.Println("ConnID: ", c.ConnID, " handle msg err: ", err)
+			fmt.Println("read msg error: ", err)
 			break
 		}
+
+		// 得到Request数据
+		req := &Request{
+			conn: c,
+			msg:  msg,
+		}
+
+		// 从路由中找到注册绑定的Conn对应的router调用
+		go func(request ziface.IRequest) {
+			c.Router.PreHandle(request)
+			c.Router.Handle(request)
+			c.Router.PostHandle(request)
+		}(req)
+
 	}
 }
 
@@ -67,17 +76,59 @@ func (c *Connection) RemoteAddr() net.Addr {
 	return c.Conn.RemoteAddr()
 }
 
-func (c *Connection) Send(data []byte) error {
-	//TODO implement me
-	panic("implement me")
+func (c *Connection) SendMsg(msgId uint32, data []byte) error {
+	if c.IsClosed {
+		return errors.New("connection closed when send msg")
+	}
+
+	// 将data进行封包 MsgData包
+	dp := NewDataPack()
+
+	binaryMsg, err := dp.Pack(NewMsgPackage(msgId, data))
+	if err != nil {
+		fmt.Println("pack error msg id = ", msgId)
+		return errors.New("pack error msg")
+	}
+
+	if _, err := c.Conn.Write(binaryMsg); err != nil {
+		fmt.Println("write error msg id = ", msgId)
+		return errors.New("write error msg")
+	}
+	return nil
 }
 
-func NewConnection(conn *net.TCPConn, connID uint32, callbackApi ziface.HandleFunc) ziface.IConnection {
+func (c *Connection) ReadMsg() (ziface.IMessage, error) {
+	// 创建一个拆包解包的对象
+	dp := NewDataPack()
+	headData := make([]byte, dp.GetHeadLen())
+	// 读取客户端的MsgHead 8个字节
+	if _, err := io.ReadFull(c.Conn, headData); err != nil {
+		fmt.Println("read buf error: ", err)
+		return nil, err
+	}
+	msg, err := dp.Unpack(headData)
+	if err != nil {
+		fmt.Println("unpack err ", err)
+		return nil, err
+	}
+	var data []byte
+	if msg.GetMsgLen() > 0 {
+		data = make([]byte, msg.GetMsgLen())
+		if _, err := io.ReadFull(c.GetTCPConnection(), data); err != nil {
+			fmt.Println("read data buf error: ", err)
+			return nil, err
+		}
+	}
+	msg.SetData(data)
+	return msg, nil
+}
+
+func NewConnection(conn *net.TCPConn, connID uint32, router ziface.IRouter) ziface.IConnection {
 	return &Connection{
-		Conn:      conn,
-		ConnID:    connID,
-		IsClosed:  false,
-		handleApi: callbackApi,
-		ExitChan:  make(chan bool, 1),
+		Conn:     conn,
+		ConnID:   connID,
+		IsClosed: false,
+		ExitChan: make(chan bool, 1),
+		Router:   router,
 	}
 }

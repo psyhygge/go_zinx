@@ -2,31 +2,26 @@ package znet
 
 import (
 	"fmt"
+	"go_zinx/utils"
 	"go_zinx/ziface"
 	"net"
 )
 
 // Server IServer接口实现
 type Server struct {
-	Name      string // 服务器名称
-	IPVersion string // 服务器绑定的ip版本
-	IP        string // 服务器监听的IP
-	Port      int    // 服务器监听的端口号
+	Name      string         // 服务器名称
+	IPVersion string         // 服务器绑定的ip版本
+	IP        string         // 服务器监听的IP
+	Port      int            // 服务器监听的端口号
+	Router    ziface.IRouter // router
 }
 
-func CallBackToClient(conn *net.TCPConn, data []byte, cnt int) error {
-	fmt.Println("[Conn Handle] CallBackToClient is Called...")
-	fmt.Printf("[Receive Client Buf] %s, cnt = %d\n", data, cnt)
-	_, err := conn.Write(data[:cnt])
-	if err != nil {
-		fmt.Println("write back buf err: ", err)
-		return err
-	}
-	return nil
+func (s *Server) AddRouter(router ziface.IRouter) {
+	s.Router = router
 }
 
 func (s *Server) Start() {
-	fmt.Printf("[Start] Server Listener at IP:%s, Port %d, is starting\n", s.IP, s.Port)
+	fmt.Printf("[Zinx] Server Name:%s, Host:%s, Port:%d\n", utils.GlobalObject.Name, utils.GlobalObject.Host, utils.GlobalObject.TcpPort)
 
 	go func() {
 		// 1.获取一个TCP的Addr
@@ -44,7 +39,7 @@ func (s *Server) Start() {
 		fmt.Println("start zinx server success")
 		var cid uint32
 		cid = 0
-		// 3.阻塞等待客户端连接，处理客户端连接业务（读写）
+		// 3.阻塞等待客户端连接，处理客户端连接业务
 		for {
 			conn, err := listener.AcceptTCP()
 			if err != nil {
@@ -52,8 +47,9 @@ func (s *Server) Start() {
 				continue
 			}
 			// 客户端正常连接，创建协程进行业务处理
-			dealConn := NewConnection(conn, cid, CallBackToClient)
+			dealConn := NewConnection(conn, cid, s.Router)
 			cid++
+
 			go dealConn.Start()
 		}
 	}()
@@ -75,11 +71,12 @@ func (s *Server) Serve() {
 }
 
 // NewServer 创建一个服务器句柄
-func NewServer(name string) ziface.IServer {
+func NewServer() ziface.IServer {
 	return &Server{
-		Name:      name,
+		Name:      utils.GlobalObject.Name,
 		IPVersion: "tcp4",
-		IP:        "0.0.0.0",
-		Port:      8999,
+		IP:        utils.GlobalObject.Host,
+		Port:      utils.GlobalObject.TcpPort,
+		Router:    nil,
 	}
 }
