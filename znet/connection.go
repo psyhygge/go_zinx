@@ -9,11 +9,11 @@ import (
 )
 
 type Connection struct {
-	Conn     *net.TCPConn   // tcp socket
-	ConnID   uint32         // 连接id
-	IsClosed bool           // 连接是否关闭
-	ExitChan chan bool      // 告知当前连接停止的 channel
-	Router   ziface.IRouter // 该连接处理的router
+	Conn       *net.TCPConn       // tcp socket
+	ConnID     uint32             // 连接id
+	IsClosed   bool               // 连接是否关闭
+	ExitChan   chan bool          // 告知当前连接停止的 channel
+	MsgHandler ziface.IMsgHandler // 消息管理模块
 }
 
 func (c *Connection) StartReader() {
@@ -35,11 +35,7 @@ func (c *Connection) StartReader() {
 		}
 
 		// 从路由中找到注册绑定的Conn对应的router调用
-		go func(request ziface.IRequest) {
-			c.Router.PreHandle(request)
-			c.Router.Handle(request)
-			c.Router.PostHandle(request)
-		}(req)
+		go c.MsgHandler.DoMsgHandler(req)
 
 	}
 }
@@ -123,12 +119,12 @@ func (c *Connection) ReadMsg() (ziface.IMessage, error) {
 	return msg, nil
 }
 
-func NewConnection(conn *net.TCPConn, connID uint32, router ziface.IRouter) ziface.IConnection {
+func NewConnection(conn *net.TCPConn, connID uint32, msgHandler ziface.IMsgHandler) ziface.IConnection {
 	return &Connection{
-		Conn:     conn,
-		ConnID:   connID,
-		IsClosed: false,
-		ExitChan: make(chan bool, 1),
-		Router:   router,
+		Conn:       conn,
+		ConnID:     connID,
+		IsClosed:   false,
+		ExitChan:   make(chan bool, 1),
+		MsgHandler: msgHandler,
 	}
 }
