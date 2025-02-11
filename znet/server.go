@@ -37,6 +37,10 @@ func (s *Server) Start() {
 			return
 		}
 		fmt.Println("start zinx server success")
+
+		// 启动worker工作池
+		s.MsgHandler.StartWorkerPool()
+
 		var cid uint32
 		cid = 0
 		// 3.阻塞等待客户端连接，处理客户端连接业务
