@@ -49,11 +49,49 @@ func (h *HelloArtistRouter) Handle(request ziface.IRequest) {
 	}
 }
 
+func DoConnStart(conn ziface.IConnection) {
+	fmt.Println("SetOnConnStart is Called ... ")
+	err := conn.SendMsg(200, []byte("[Start Hook]=======> conn start"))
+	if err != nil {
+		fmt.Println("write back err ", err)
+		return
+	}
+
+	// 给当前连接设置一些属性
+	conn.SetProperty("Name", "Artist")
+	conn.SetProperty("Age", 18)
+	conn.SetProperty("Github", "github.com/psyhygge")
+
+}
+
+func DoConnStop(conn ziface.IConnection) {
+	fmt.Println("SetOnConnStop is Called ... ")
+	fmt.Println("connID = ", conn.GetConnID(), " is closed")
+
+	// 获取连接属性
+	if name, err := conn.GetProperty("Name"); err == nil {
+		fmt.Println("Name: ", name)
+	}
+	if age, err := conn.GetProperty("Age"); err == nil {
+		fmt.Println("Age: ", age)
+	}
+	if github, err := conn.GetProperty("Github"); err == nil {
+		fmt.Println("Github: ", github)
+	}
+}
+
 func main() {
 	// 创建一个server服务
 	s := znet.NewServer()
+
+	// 注册连接的hook回调函数
+	s.SetOnConnStart(DoConnStart)
+	s.SetOnConnStop(DoConnStop)
+
+	// 添加自定义路由
 	s.AddRouter(0, &PingRouter{})
 	s.AddRouter(1, &HelloArtistRouter{})
+
 	// 运行服务的协程
 	go func() {
 		// 启动服务
