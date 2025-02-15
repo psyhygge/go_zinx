@@ -9,12 +9,44 @@ import (
 
 // Server IServer接口实现
 type Server struct {
-	Name        string                    // 服务器名称
-	IPVersion   string                    // 服务器绑定的ip版本
-	IP          string                    // 服务器监听的IP
-	Port        int                       // 服务器监听的端口号
-	MsgHandler  ziface.IMsgHandler        // 消息管理模块
-	ConnManager ziface.IConnectionManager // 连接管理模块
+	Name        string                        // 服务器名称
+	IPVersion   string                        // 服务器绑定的ip版本
+	IP          string                        // 服务器监听的IP
+	Port        int                           // 服务器监听的端口号
+	MsgHandler  ziface.IMsgHandler            // 消息管理模块
+	ConnManager ziface.IConnectionManager     // 连接管理模块
+	OnConnStart func(conn ziface.IConnection) // 连接创建时调用Hook函数
+	OnConnStop  func(conn ziface.IConnection) // 连接断开时调用Hook函数
+}
+
+// SetOnConnStart 设置OnConnStart
+func (s *Server) SetOnConnStart(hookFunc func(conn ziface.IConnection)) {
+	s.OnConnStart = hookFunc
+}
+
+// SetOnConnStop 设置OnConnStop
+func (s *Server) SetOnConnStop(hookFunc func(conn ziface.IConnection)) {
+	s.OnConnStop = hookFunc
+}
+
+// CallOnConnStart 调用OnConnStart
+func (s *Server) CallOnConnStart(conn ziface.IConnection) {
+	if s.OnConnStart != nil {
+		fmt.Println("[Zinx]=======> CallOnConnStart")
+		s.OnConnStart(conn)
+	} else {
+		fmt.Println("[Zinx]=======> CallOnConnStart is nil")
+	}
+}
+
+// CallOnConnStop 调用OnConnStop
+func (s *Server) CallOnConnStop(conn ziface.IConnection) {
+	if s.OnConnStop != nil {
+		fmt.Println("[Zinx]=======> CallOnConnStop")
+		s.OnConnStop(conn)
+	} else {
+		fmt.Println("[Zinx]=======> CallOnConnStop is nil")
+	}
 }
 
 func (s *Server) GetConnMgr() ziface.IConnectionManager {

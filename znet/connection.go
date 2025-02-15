@@ -7,16 +7,19 @@ import (
 	"go_zinx/ziface"
 	"io"
 	"net"
+	"sync"
 )
 
 type Connection struct {
-	TcpServer  ziface.IServer     // 当前连接隶属于哪个Server (父节点)
-	Conn       *net.TCPConn       // tcp socket
-	ConnID     uint32             // 连接id
-	IsClosed   bool               // 连接是否关闭
-	ExitChan   chan bool          // 告知当前连接停止的 channel
-	MsgChan    chan []byte        // 用于读写消息的 channel
-	MsgHandler ziface.IMsgHandler // 消息管理模块
+	TcpServer    ziface.IServer         // 当前连接隶属于哪个Server (父节点)
+	Conn         *net.TCPConn           // tcp socket
+	ConnID       uint32                 // 连接id
+	IsClosed     bool                   // 连接是否关闭
+	ExitChan     chan bool              // 告知当前连接停止的 channel
+	MsgChan      chan []byte            // 用于读写消息的 channel
+	MsgHandler   ziface.IMsgHandler     // 消息管理模块
+	property     map[string]interface{} // 连接属性集合
+	propertyLock sync.RWMutex           // 保护连接属性的锁
 }
 
 func (c *Connection) StartWriter() {
@@ -73,6 +76,9 @@ func (c *Connection) Start() {
 
 	// TODO 启动从当前连接写数据业务
 	go c.StartWriter()
+
+	// TODO 按照开发者自己的逻辑，在得到一个客户端的连接后，需要执行一个hook函数
+	c.TcpServer.CallOnConnStart(c)
 }
 
 func (c *Connection) Stop() {
@@ -82,6 +88,10 @@ func (c *Connection) Stop() {
 		return
 	}
 	c.IsClosed = true
+
+	// TODO 按照开发者自己的逻辑，在关闭客户端的连接后，需要执行一个hook函数
+	c.TcpServer.CallOnConnStop(c)
+
 	// 连接关闭
 	c.Conn.Close()
 	// 告知Writer退出
@@ -151,6 +161,36 @@ func (c *Connection) ReadMsg() (ziface.IMessage, error) {
 	return msg, nil
 }
 
+func (c *Connection) SetProperty(key string, value interface{}) {
+	c.propertyLock.Lock()
+	defer c.propertyLock.Unlock()
+
+	if _, ok := c.property[key]; !ok {
+		c.property[key] = value
+	} else {
+		fmt.Println("key already exist")
+		return
+	}
+}
+
+func (c *Connection) GetProperty(key string) (interface{}, error) {
+	c.propertyLock.RLock()
+	defer c.propertyLock.RUnlock()
+
+	if _, ok := c.property[key]; ok {
+		return c.property[key], nil
+	} else {
+		return nil, errors.New("key not exist")
+	}
+}
+
+func (c *Connection) RemoveProperty(key string) {
+	c.propertyLock.Lock()
+	defer c.propertyLock.Unlock()
+
+	delete(c.property, key)
+}
+
 func NewConnection(server ziface.IServer, conn *net.TCPConn, connID uint32, msgHandler ziface.IMsgHandler) ziface.IConnection {
 	c := &Connection{
 		TcpServer:  server,
@@ -160,6 +200,7 @@ func NewConnection(server ziface.IServer, conn *net.TCPConn, connID uint32, msgH
 		ExitChan:   make(chan bool, 1),
 		MsgChan:    make(chan []byte),
 		MsgHandler: msgHandler,
+		property:   make(map[string]interface{}),
 	}
 
 	// 将当前连接加入ConnManager中
