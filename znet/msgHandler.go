@@ -5,12 +5,14 @@ import (
 	"go_zinx/utils"
 	"go_zinx/ziface"
 	"strconv"
+	"sync"
 )
 
 type MsgHandler struct {
 	Apis           map[uint32]ziface.IRouter // 存放每个MsgID对应的处理方法
 	TaskQueue      []chan ziface.IRequest    // 负责Worker取任务的消息队列, TaskQueue[0]对应worker0, TaskQueue[1]对应worker1...
 	WorkerPoolSize uint32                    // 业务工作Worker池的worker数量
+	wg             sync.WaitGroup            // 用于等待所有请求处理完成
 }
 
 // DoMsgHandler 执行对应Router的消息处理方法
@@ -58,8 +60,20 @@ func (mh *MsgHandler) StartOneWorker(workerId int, taskChan chan ziface.IRequest
 
 	for {
 		select {
-		case request := <-taskChan:
+		case request, ok := <-taskChan:
+			if !ok {
+				// 如果taskChan已经关闭, 则退出worker
+				return
+			}
+
+			// 增加等待组的计数，表示当前有一个请求正在处理
+			mh.wg.Add(1)
+
+			// 处理请求
 			mh.DoMsgHandler(request)
+
+			// 请求处理完毕，减少等待组的计数
+			mh.wg.Done()
 		}
 	}
 }
@@ -72,4 +86,17 @@ func (mh *MsgHandler) SendMsgToTaskQueue(request ziface.IRequest) {
 	fmt.Println("Add ConnID=", request.GetConnection().GetConnID(), " request msgID=", request.GetMsgID(), " to workerID=", workerId)
 	// 将消息发送给worker的taskChannel即可
 	mh.TaskQueue[workerId] <- request
+}
+
+// StopWorkerPool 停止Worker工作池
+func (mh *MsgHandler) StopWorkerPool() {
+	// 等待所有请求处理完再关闭通道
+	mh.wg.Wait()
+
+	// 关闭所有 worker 的任务队列
+	for i := 0; i < int(mh.WorkerPoolSize); i++ {
+		close(mh.TaskQueue[i])
+	}
+
+	fmt.Println("Worker pool stopped.")
 }

@@ -15,4 +15,7 @@ type IMsgHandler interface {
 
 	// SendMsgToTaskQueue 将消息交给TaskQueue, 由worker进行处理
 	SendMsgToTaskQueue(request IRequest)
+
+	// StopWorkerPool 停止worker工作池
+	StopWorkerPool()
 }

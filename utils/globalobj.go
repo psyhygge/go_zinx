@@ -49,7 +49,7 @@ func init() {
 		MaxConn:          1000,
 		MaxPackageSize:   4096,
 		WorkerPoolSize:   10,
-		MaxWorkerTaskNum: 1024,
+		MaxWorkerTaskNum: 1,
 	}
 
 	// 读取conf/zinx.json文件，根据配置文件赋值GlobalObject

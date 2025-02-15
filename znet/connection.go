@@ -10,6 +10,7 @@ import (
 )
 
 type Connection struct {
+	TcpServer  ziface.IServer     // 当前连接隶属于哪个Server (父节点)
 	Conn       *net.TCPConn       // tcp socket
 	ConnID     uint32             // 连接id
 	IsClosed   bool               // 连接是否关闭
@@ -85,6 +86,11 @@ func (c *Connection) Stop() {
 	c.Conn.Close()
 	// 告知Writer退出
 	c.ExitChan <- true
+
+	// 从连接管理器中删除当前连接
+	c.TcpServer.GetConnMgr().Remove(c)
+
+	// 关闭channel, 回收资源
 	close(c.ExitChan)
 	close(c.MsgChan)
 }
@@ -145,8 +151,9 @@ func (c *Connection) ReadMsg() (ziface.IMessage, error) {
 	return msg, nil
 }
 
-func NewConnection(conn *net.TCPConn, connID uint32, msgHandler ziface.IMsgHandler) ziface.IConnection {
-	return &Connection{
+func NewConnection(server ziface.IServer, conn *net.TCPConn, connID uint32, msgHandler ziface.IMsgHandler) ziface.IConnection {
+	c := &Connection{
+		TcpServer:  server,
 		Conn:       conn,
 		ConnID:     connID,
 		IsClosed:   false,
@@ -154,4 +161,9 @@ func NewConnection(conn *net.TCPConn, connID uint32, msgHandler ziface.IMsgHandl
 		MsgChan:    make(chan []byte),
 		MsgHandler: msgHandler,
 	}
+
+	// 将当前连接加入ConnManager中
+	c.TcpServer.GetConnMgr().Add(c)
+
+	return c
 }
