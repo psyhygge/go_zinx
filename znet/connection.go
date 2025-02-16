@@ -43,11 +43,16 @@ func (c *Connection) StartWriter() {
 func (c *Connection) StartReader() {
 	fmt.Println("[Reader Goroutine is running...]")
 	defer fmt.Println(c.RemoteAddr().String(), " conn reader exit!")
-	defer c.Stop()
+	//defer c.Stop()
 
 	for {
 		msg, err := c.ReadMsg()
 		if err != nil {
+			if err == io.EOF {
+				fmt.Println(c.RemoteAddr().String(), " remote client exit...")
+				c.Stop()
+				return
+			}
 			fmt.Println("read msg error: ", err)
 			break
 		}
@@ -92,13 +97,19 @@ func (c *Connection) Stop() {
 	// TODO 按照开发者自己的逻辑，在关闭客户端的连接后，需要执行一个hook函数
 	c.TcpServer.CallOnConnStop(c)
 
-	// 连接关闭
-	c.Conn.Close()
 	// 告知Writer退出
 	c.ExitChan <- true
 
+	// 连接关闭
+	err := c.Conn.Close()
+	if err != nil {
+		fmt.Println("[connection stop error]: ", err)
+		return
+	}
+
 	// 从连接管理器中删除当前连接
-	c.TcpServer.GetConnMgr().Remove(c)
+	// 在外层Server的Stop中已经删除对应的连接，这里不再删除
+	//c.TcpServer.GetConnMgr().Remove(c)
 
 	// 关闭channel, 回收资源
 	close(c.ExitChan)

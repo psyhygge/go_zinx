@@ -54,6 +54,7 @@ func (cm *ConnManager) ClearConn() {
 	defer cm.ConnLock.Unlock()
 
 	for connID, conn := range cm.Connections {
+		fmt.Println("ClearConn, connID = ", connID)
 		conn.Stop()
 		delete(cm.Connections, connID)
 	}

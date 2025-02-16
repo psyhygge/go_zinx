@@ -63,6 +63,7 @@ func (mh *MsgHandler) StartOneWorker(workerId int, taskChan chan ziface.IRequest
 		case request, ok := <-taskChan:
 			if !ok {
 				// 如果taskChan已经关闭, 则退出worker
+				fmt.Println("Worker ", workerId, " is exited.")
 				return
 			}
 
