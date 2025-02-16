@@ -52,10 +52,10 @@ func init() {
 		MaxConn:                 1000,
 		MaxPackageSize:          4096,
 		WorkerPoolSize:          10,
-		MaxWorkerTaskNum:        1,
-		WorkerGoroutineNum:      3,
-		MaxDynamicGoroutines:    5,
-		DynamicGoroutineTimeout: 30,
+		MaxWorkerTaskNum:        0,
+		WorkerGoroutineNum:      2,
+		MaxDynamicGoroutines:    2,
+		DynamicGoroutineTimeout: 120,
 	}
 
 	// 读取conf/zinx.json文件，根据配置文件赋值GlobalObject

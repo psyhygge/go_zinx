@@ -92,7 +92,7 @@ func (mh *MsgHandler) StartWorker(queueID, workerID int, taskChan <-chan ziface.
 				fmt.Printf("Worker Queue[%d]-Goroutine[%d] exited\n", queueID, workerID)
 				return
 			}
-
+			fmt.Printf("Worker Queue[%d]-Goroutine[%d] working\n", queueID, workerID)
 			mh.wg.Add(1)
 			mh.DoMsgHandler(req)
 			mh.wg.Done()
@@ -107,12 +107,15 @@ func (mh *MsgHandler) SendMsgToTaskQueue(request ziface.IRequest) {
 	select {
 	case mh.TaskQueue[workerID] <- request:
 		// 成功写入队列
+	case <-mh.stopChan:
+		fmt.Println("SendMsgToTaskQueue stopped")
+		return
 	default:
 		// 队列已满时的降级处理
 		fmt.Printf("Worker Queue[%d] is full! ReqID=%d\n", workerID, request.GetMsgID())
 
 		// 尝试动态增加协程处理请求
-		if mh.tryStartDynamicGoroutine(request) {
+		if mh.tryStartDynamicGoroutine(request, mh.TaskQueue[workerID]) {
 			return
 		}
 
@@ -130,7 +133,7 @@ func (mh *MsgHandler) loadBalance(connID uint32) int {
 }
 
 // tryStartDynamicGoroutine 尝试启动动态协程处理请求
-func (mh *MsgHandler) tryStartDynamicGoroutine(request ziface.IRequest) bool {
+func (mh *MsgHandler) tryStartDynamicGoroutine(request ziface.IRequest, taskChan <-chan ziface.IRequest) bool {
 	mh.dynamicMutex.Lock()
 	defer mh.dynamicMutex.Unlock()
 
@@ -141,18 +144,19 @@ func (mh *MsgHandler) tryStartDynamicGoroutine(request ziface.IRequest) bool {
 
 	// 增加动态协程计数
 	mh.dynamicGoroutineCount++
+	fmt.Println("Starting dynamic goroutine... Num=", mh.dynamicGoroutineCount)
 
 	// 增加动态协程的WaitGroup计数
 	mh.dynamicWg.Add(1)
 
 	// 启动动态协程
-	go mh.handleWithDynamicGoroutine(request)
+	go mh.handleWithDynamicGoroutine(request, taskChan)
 
 	return true
 }
 
 // handleWithDynamicGoroutine 动态协程处理请求
-func (mh *MsgHandler) handleWithDynamicGoroutine(request ziface.IRequest) {
+func (mh *MsgHandler) handleWithDynamicGoroutine(request ziface.IRequest, taskChan <-chan ziface.IRequest) {
 	defer func() {
 		// 减少动态协程计数
 		mh.dynamicMutex.Lock()
@@ -170,13 +174,23 @@ func (mh *MsgHandler) handleWithDynamicGoroutine(request ziface.IRequest) {
 	timeout := time.NewTimer(time.Duration(utils.GlobalObject.DynamicGoroutineTimeout) * time.Second)
 	defer timeout.Stop()
 
-	select {
-	case <-timeout.C:
-		// 超时后退出
-		fmt.Println("Dynamic goroutine exited due to timeout")
-	case <-mh.stopChan:
-		// 收到停止信号后退出
-		fmt.Println("Dynamic goroutine exited due to stop signal")
+	for {
+		select {
+		case req, ok := <-taskChan:
+			if !ok {
+				fmt.Println("Dynamic goroutine exited")
+				return
+			}
+			mh.DoMsgHandler(req)
+		case <-timeout.C:
+			// 超时后退出
+			fmt.Println("Dynamic goroutine exited due to timeout")
+			return
+		case <-mh.stopChan:
+			// 收到停止信号后退出
+			fmt.Println("Dynamic goroutine exited due to stop signal")
+			return
+		}
 	}
 }
 
