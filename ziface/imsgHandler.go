@@ -11,7 +11,8 @@ type IMsgHandler interface {
 	StartWorkerPool()
 
 	// StartOneWorker 启动一个Worker工作流程
-	StartOneWorker(workerId int, taskChan chan IRequest)
+	//StartOneWorker(workerId int, taskChan chan IRequest)
+	StartWorker(queueID, workerID int, taskChan <-chan IRequest)
 
 	// SendMsgToTaskQueue 将消息交给TaskQueue, 由worker进行处理
 	SendMsgToTaskQueue(request IRequest)
