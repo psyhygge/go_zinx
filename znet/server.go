@@ -108,8 +108,11 @@ func (s *Server) Start() {
 func (s *Server) Stop() {
 	// TODO 做服务器的资源回收或停止
 	fmt.Println("[Zinx] Server Stop")
-	s.ConnManager.ClearConn()
+
+	// 先关闭工作池
 	s.MsgHandler.StopWorkerPool()
+	// 再清除连接
+	s.ConnManager.ClearConn()
 }
 
 func (s *Server) Serve() {
